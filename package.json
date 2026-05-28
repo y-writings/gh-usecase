@@ -1,0 +1,29 @@
+{
+  "name": "gh-pr-counter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gh-pr-counter": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "pr-count": "bun run src/cli/pr-count/index.ts",
+    "pr-list": "bun run src/cli/pr-list/index.ts",
+    "pr-detail": "bun run src/cli/pr-detail/index.ts",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "check": "biome check .",
+    "check:write": "biome check --write .",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun build src/cli/pr-count/index.ts --target bun --outdir dist"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}
