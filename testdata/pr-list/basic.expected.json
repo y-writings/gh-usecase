@@ -1,0 +1,33 @@
+{
+  "data": {
+    "repository": {
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 123,
+            "createdAt": "2026-05-01T10:00:00Z",
+            "state": "OPEN",
+            "mergedAt": null,
+            "changedFiles": 3,
+            "reviewDecision": "REVIEW_REQUIRED",
+            "comments": { "totalCount": 2 },
+            "author": { "login": "alice" },
+            "reviewRequests": {
+              "nodes": [
+                { "requestedReviewer": { "login": "bob" } },
+                { "requestedReviewer": { "slug": "platform" } }
+              ]
+            },
+            "reviews": {
+              "nodes": [{ "author": { "login": "carol" } }, { "author": null }]
+            }
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "cursor-1"
+        }
+      }
+    }
+  }
+}
