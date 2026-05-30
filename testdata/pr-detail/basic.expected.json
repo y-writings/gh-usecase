@@ -1,0 +1,89 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 123,
+        "title": "Improve parser",
+        "description": "This changes parser behavior.",
+        "reviewDecision": "CHANGES_REQUESTED",
+        "authorLogin": "alice",
+        "mergeCommitOid": "merge-oid",
+        "reviewStartCommitOid": "commit-original",
+        "reviewStartConfidence": "high",
+        "codeDiff": {
+          "stats": {
+            "changedFiles": 3,
+            "additions": 10,
+            "deletions": 4
+          },
+          "files": [
+            {
+              "path": "src/parser.ts",
+              "changeType": "MODIFIED",
+              "additions": 8,
+              "deletions": 3
+            }
+          ],
+          "excludedFiles": [
+            { "path": "dist/bundle.js", "reason": "likely-generated" },
+            { "path": "assets/logo.png", "reason": "likely-binary" }
+          ],
+          "filePageInfo": {
+            "hasNextPage": false,
+            "endCursor": null,
+            "totalCount": 3
+          },
+          "strategy": {
+            "baseCommit": "base-oid",
+            "headCommit": "head-oid"
+          }
+        },
+        "conversations": {
+          "reviews": [
+            {
+              "authorLogin": "bob",
+              "state": "CHANGES_REQUESTED",
+              "body": "Please simplify this.",
+              "submittedAt": "2026-05-01T10:10:00Z",
+              "commitOid": "commit-review"
+            }
+          ],
+          "reviewThreads": [
+            {
+              "isResolved": true,
+              "comments": [
+                {
+                  "id": "comment-1",
+                  "authorLogin": "carol",
+                  "body": "This branch is hard to read.",
+                  "path": "src/parser.ts",
+                  "createdAt": "2026-05-01T10:05:00Z",
+                  "line": 12,
+                  "originalLine": 10,
+                  "startLine": null,
+                  "originalStartLine": null,
+                  "side": "RIGHT",
+                  "startSide": null,
+                  "commitOid": "commit-comment",
+                  "originalCommitOid": "commit-original"
+                }
+              ]
+            }
+          ]
+        },
+        "commits": [
+          {
+            "oid": "commit-original",
+            "messageHeadline": "Initial parser change",
+            "committedDate": "2026-05-01T09:00:00Z"
+          },
+          {
+            "oid": "commit-review",
+            "messageHeadline": "Apply review feedback",
+            "committedDate": "2026-05-01T11:00:00Z"
+          }
+        ]
+      }
+    }
+  }
+}

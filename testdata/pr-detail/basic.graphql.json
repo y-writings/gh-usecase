@@ -1,0 +1,87 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 123,
+        "title": "Improve parser",
+        "bodyText": "This changes parser behavior.",
+        "reviewDecision": "CHANGES_REQUESTED",
+        "author": { "login": "alice" },
+        "mergeCommit": { "oid": "merge-oid" },
+        "baseRefOid": "base-oid",
+        "headRefOid": "head-oid",
+        "additions": 10,
+        "deletions": 4,
+        "changedFiles": 3,
+        "reviews": {
+          "nodes": [
+            {
+              "id": "review-1",
+              "author": { "login": "bob" },
+              "state": "CHANGES_REQUESTED",
+              "bodyText": "Please simplify this.",
+              "submittedAt": "2026-05-01T10:10:00Z",
+              "commit": { "oid": "commit-review" }
+            }
+          ]
+        },
+        "reviewThreads": {
+          "nodes": [
+            {
+              "isResolved": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "comment-1",
+                    "author": { "login": "carol" },
+                    "bodyText": "This branch is hard to read.",
+                    "path": "src/parser.ts",
+                    "createdAt": "2026-05-01T10:05:00Z",
+                    "line": 12,
+                    "originalLine": 10,
+                    "startLine": null,
+                    "originalStartLine": null,
+                    "side": "RIGHT",
+                    "startSide": null,
+                    "commit": { "oid": "commit-comment" },
+                    "originalCommit": { "oid": "commit-original" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "files": {
+          "totalCount": 3,
+          "nodes": [
+            { "path": "src/parser.ts", "additions": 8, "deletions": 3, "changeType": "MODIFIED" },
+            { "path": "dist/bundle.js", "additions": 100, "deletions": 0, "changeType": "ADDED" },
+            { "path": "assets/logo.png", "additions": 0, "deletions": 0, "changeType": "MODIFIED" }
+          ],
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "commit-original",
+                "messageHeadline": "Initial parser change",
+                "committedDate": "2026-05-01T09:00:00Z"
+              }
+            },
+            {
+              "commit": {
+                "oid": "commit-review",
+                "messageHeadline": "Apply review feedback",
+                "committedDate": "2026-05-01T11:00:00Z"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
