@@ -1,0 +1,9 @@
+.git
+.entire
+.opencode
+.gh
+docs
+testdata
+.DS_Store
+*.log
+gh-usecase
