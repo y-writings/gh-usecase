@@ -73,6 +73,7 @@ type restCall struct {
 
 type fakeRESTClient struct {
 	current       CurrentConfig
+	currentJSON   string
 	patchResponse patchResponse
 	errOnGet      error
 	errOnPatch    error
@@ -94,6 +95,9 @@ func (c *fakeRESTClient) DoWithContext(ctx context.Context, method string, path 
 	case http.MethodGet:
 		if c.errOnGet != nil {
 			return c.errOnGet
+		}
+		if c.currentJSON != "" {
+			return json.Unmarshal([]byte(c.currentJSON), response)
 		}
 		return assignJSON(response, c.current)
 	case http.MethodPatch:
@@ -166,6 +170,24 @@ func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) 
 	}
 	if len(client.calls) != 1 || client.calls[0].Method != http.MethodGet {
 		t.Fatalf("calls = %#v, want only GET", client.calls)
+	}
+}
+
+func TestExecutePatchesWhenRunnerTypeIsLabeled(t *testing.T) {
+	client := &fakeRESTClient{
+		currentJSON: `{"state":"configured","languages":["go"],"query_suite":"default","threat_model":"remote","runner_type":"labeled","runner_label":"codeql-large"}`,
+	}
+
+	output, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if !output.Changed {
+		t.Fatal("Changed = false, want true for labeled runner type")
+	}
+	if len(client.calls) != 2 || client.calls[1].Method != http.MethodPatch {
+		t.Fatalf("calls = %#v, want PATCH", client.calls)
 	}
 }
 

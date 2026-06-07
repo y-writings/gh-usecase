@@ -9,6 +9,8 @@ type Input struct {
 type CurrentConfig struct {
 	State       string   `json:"state"`
 	Languages   []string `json:"languages"`
+	RunnerType  *string  `json:"runner_type"`
+	RunnerLabel *string  `json:"runner_label"`
 	QuerySuite  string   `json:"query_suite"`
 	ThreatModel string   `json:"threat_model"`
 	Schedule    *string  `json:"schedule"`

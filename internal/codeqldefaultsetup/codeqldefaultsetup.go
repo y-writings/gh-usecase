@@ -152,8 +152,17 @@ func defaultSetupPath(owner string, repo string) string {
 func configMatches(current CurrentConfig, desired DesiredConfig) bool {
 	return current.State == desired.State &&
 		equalStringSlices(current.Languages, desired.Languages) &&
+		runnerTypeMatches(current.RunnerType, desired.RunnerType) &&
 		current.QuerySuite == desired.QuerySuite &&
 		current.ThreatModel == desired.ThreatModel
+}
+
+func runnerTypeMatches(current *string, desired string) bool {
+	// GitHub may omit runner_type in GET responses; omission means unknown, not drift.
+	if current == nil {
+		return true
+	}
+	return *current == desired
 }
 
 func normalizeLanguageSlice(languages []string) []string {
