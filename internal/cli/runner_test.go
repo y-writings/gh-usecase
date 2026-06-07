@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -18,6 +21,43 @@ type errorGraphQLClient struct {
 func (c *errorGraphQLClient) DoWithContext(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 	c.called = true
 	return c.err
+}
+
+type errorRESTClient struct {
+	called bool
+	err    error
+}
+
+func (c *errorRESTClient) DoWithContext(ctx context.Context, method string, path string, body io.Reader, response interface{}) error {
+	c.called = true
+	return c.err
+}
+
+type matchingRESTClient struct {
+	calls int
+}
+
+func (c *matchingRESTClient) DoWithContext(ctx context.Context, method string, path string, body io.Reader, response interface{}) error {
+	c.calls++
+	if method != http.MethodGet {
+		return errors.New("PATCH must not be called for matching setup")
+	}
+
+	payload := map[string]interface{}{
+		"state":        "configured",
+		"languages":    []string{"go"},
+		"runner_type":  "standard",
+		"runner_label": nil,
+		"query_suite":  "default",
+		"threat_model": "remote",
+		"schedule":     nil,
+		"updated_at":   nil,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(encoded, response)
 }
 
 func TestRunPrintsRootUsageForNoArgs(t *testing.T) {
@@ -267,6 +307,7 @@ func TestRunPrintsCommandUsageForHelpWithoutCreatingGitHubClient(t *testing.T) {
 		{command: "pr-count", usage: "Usage: gh-usecase pr-count"},
 		{command: "pr-list", usage: "Usage: gh-usecase pr-list"},
 		{command: "pr-detail", usage: "Usage: gh-usecase pr-detail"},
+		{command: "codeql-default-setup", usage: "Usage: gh-usecase codeql-default-setup"},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
 			var stdout bytes.Buffer
@@ -291,6 +332,134 @@ func TestRunPrintsCommandUsageForHelpWithoutCreatingGitHubClient(t *testing.T) {
 				t.Fatalf("GitHub client calls = %d, want 0", clientCalls)
 			}
 		})
+	}
+}
+
+func TestRunPrintsCodeQLDefaultSetupUsageWhenHelpFollowsCommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"codeql-default-setup", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "Usage: gh-usecase codeql-default-setup") {
+		t.Fatalf("stdout = %q, want codeql usage", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "runner_type=standard") {
+		t.Fatalf("stdout = %q, want fixed runner type", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRejectsCodeQLDefaultSetupUnknownOptionBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"codeql-default-setup", "--owner", "octo", "--repo", "repo", "--languages", "go", "--language", "python"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage: gh-usecase codeql-default-setup") {
+		t.Fatalf("stderr = %q, want codeql usage", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown option --language") {
+		t.Fatalf("stderr = %q, want unknown option", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunRejectsCodeQLDefaultSetupRepeatedLanguagesBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"codeql-default-setup", "--owner", "octo", "--repo", "repo", "--languages", "go", "--languages", "python"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if !strings.Contains(stderr.String(), "languages may be specified only once") {
+		t.Fatalf("stderr = %q, want repeated languages error", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunRejectsCodeQLDefaultSetupRepoFullNameBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"codeql-default-setup", "--owner", "octo", "--repo", "octo/repo", "--languages", "go"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if !strings.Contains(stderr.String(), "repo must not contain /") {
+		t.Fatalf("stderr = %q, want repo slash error", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunCodeQLDefaultSetupPrintsJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &matchingRESTClient{}
+
+	code := runWithClientFactories(
+		[]string{"codeql-default-setup", "--owner", "octo", "--repo", "repo", "--languages", "go"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0; stderr = %q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if restClient.calls != 1 {
+		t.Fatalf("REST calls = %d, want 1", restClient.calls)
+	}
+	if !strings.Contains(stdout.String(), "\"changed\": false") {
+		t.Fatalf("stdout = %q, want changed false JSON", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "\"runner_type\": \"standard\"") {
+		t.Fatalf("stdout = %q, want runner type", stdout.String())
 	}
 }
 

@@ -3,14 +3,16 @@ package cli
 import "strings"
 
 type ParsedArgs struct {
-	Options     map[string]string
-	Positionals []string
-	Help        bool
+	Options           map[string]string
+	OptionOccurrences map[string]int
+	Positionals       []string
+	Help              bool
 }
 
 func ParseArgs(argv []string) ParsedArgs {
 	parsed := ParsedArgs{
-		Options: make(map[string]string),
+		Options:           make(map[string]string),
+		OptionOccurrences: make(map[string]int),
 	}
 
 	for i := 0; i < len(argv); i++ {
@@ -29,11 +31,13 @@ func ParseArgs(argv []string) ParsedArgs {
 
 			if key, value, ok := strings.Cut(withoutPrefix, "="); ok {
 				if key != "" {
+					parsed.OptionOccurrences[key]++
 					parsed.Options[key] = value
 				}
 				continue
 			}
 
+			parsed.OptionOccurrences[withoutPrefix]++
 			if i+1 < len(argv) && !strings.HasPrefix(argv[i+1], "--") {
 				parsed.Options[withoutPrefix] = argv[i+1]
 				i++
