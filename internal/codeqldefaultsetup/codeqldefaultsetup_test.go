@@ -115,12 +115,10 @@ func assignJSON(target interface{}, value interface{}) error {
 }
 
 func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
-	runnerType := "standard"
 	client := &fakeRESTClient{
 		current: CurrentConfig{
 			State:       "configured",
 			Languages:   []string{"javascript-typescript", "go"},
-			RunnerType:  &runnerType,
 			QuerySuite:  "default",
 			ThreatModel: "remote",
 		},
@@ -145,6 +143,29 @@ func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
 	}
 	if !reflect.DeepEqual(output.Before.Languages, []string{"go", "javascript-typescript"}) {
 		t.Fatalf("Before.Languages = %#v, want sorted languages", output.Before.Languages)
+	}
+}
+
+func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
+	client := &fakeRESTClient{
+		current: CurrentConfig{
+			State:       "configured",
+			Languages:   []string{"go"},
+			QuerySuite:  "default",
+			ThreatModel: "remote",
+		},
+	}
+
+	output, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if output.Changed {
+		t.Fatal("Changed = true, want false")
+	}
+	if len(client.calls) != 1 || client.calls[0].Method != http.MethodGet {
+		t.Fatalf("calls = %#v, want only GET", client.calls)
 	}
 }
 
@@ -186,12 +207,10 @@ func TestExecutePatchesWhenConfigurationDiffers(t *testing.T) {
 }
 
 func TestExecutePatchesWhenCurrentLanguagesAreSuperset(t *testing.T) {
-	runnerType := "standard"
 	client := &fakeRESTClient{
 		current: CurrentConfig{
 			State:       "configured",
 			Languages:   []string{"go", "python"},
-			RunnerType:  &runnerType,
 			QuerySuite:  "default",
 			ThreatModel: "remote",
 		},

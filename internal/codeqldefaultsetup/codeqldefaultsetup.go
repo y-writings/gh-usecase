@@ -152,7 +152,6 @@ func defaultSetupPath(owner string, repo string) string {
 func configMatches(current CurrentConfig, desired DesiredConfig) bool {
 	return current.State == desired.State &&
 		equalStringSlices(current.Languages, desired.Languages) &&
-		stringPointerValue(current.RunnerType) == desired.RunnerType &&
 		current.QuerySuite == desired.QuerySuite &&
 		current.ThreatModel == desired.ThreatModel
 }
@@ -185,11 +184,4 @@ func equalStringSlices(left []string, right []string) bool {
 		}
 	}
 	return true
-}
-
-func stringPointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
