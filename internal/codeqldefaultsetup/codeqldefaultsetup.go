@@ -158,7 +158,8 @@ func configMatches(current CurrentConfig, desired DesiredConfig) bool {
 }
 
 func runnerTypeMatches(current *string, desired string) bool {
-	return current != nil && *current == desired
+	// If GitHub omits runner_type, preserve idempotency and only treat explicit values as drift.
+	return current == nil || *current == desired
 }
 
 func normalizeLanguageSlice(languages []string) []string {

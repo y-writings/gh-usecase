@@ -152,7 +152,7 @@ func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
 	}
 }
 
-func TestExecutePatchesWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
+func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
 	client := &fakeRESTClient{
 		current: CurrentConfig{
 			State:       "configured",
@@ -167,11 +167,11 @@ func TestExecutePatchesWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if !output.Changed {
-		t.Fatal("Changed = false, want true when runner type is not reported")
+	if output.Changed {
+		t.Fatal("Changed = true, want false when runner type is not reported")
 	}
-	if len(client.calls) != 2 || client.calls[1].Method != http.MethodPatch {
-		t.Fatalf("calls = %#v, want PATCH", client.calls)
+	if len(client.calls) != 1 || client.calls[0].Method != http.MethodGet {
+		t.Fatalf("calls = %#v, want only GET", client.calls)
 	}
 }
 
