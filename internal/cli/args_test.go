@@ -49,3 +49,42 @@ func TestParseArgsDoesNotAddMissingOptionValue(t *testing.T) {
 		t.Fatalf("Options[owner] = %q, want missing", parsed.Options["owner"])
 	}
 }
+
+func TestParseArgsTracksOptionOccurrences(t *testing.T) {
+	parsed := ParseArgs([]string{
+		"codeql-default-setup",
+		"--owner", "octo",
+		"--repo=hello",
+		"--languages", "go",
+		"--languages", "python",
+		"--flag-without-value",
+	})
+
+	wantOccurrences := map[string]int{
+		"owner":              1,
+		"repo":               1,
+		"languages":          2,
+		"flag-without-value": 1,
+	}
+	if !reflect.DeepEqual(parsed.OptionOccurrences, wantOccurrences) {
+		t.Fatalf("OptionOccurrences = %#v, want %#v", parsed.OptionOccurrences, wantOccurrences)
+	}
+
+	if parsed.Options["languages"] != "python" {
+		t.Fatalf("Options[languages] = %q, want last value python", parsed.Options["languages"])
+	}
+	if _, ok := parsed.Options["flag-without-value"]; ok {
+		t.Fatalf("Options[flag-without-value] = %q, want missing", parsed.Options["flag-without-value"])
+	}
+}
+
+func TestParseArgsTracksMissingOptionValueOccurrence(t *testing.T) {
+	parsed := ParseArgs([]string{"codeql-default-setup", "--owner"})
+
+	if parsed.OptionOccurrences["owner"] != 1 {
+		t.Fatalf("OptionOccurrences[owner] = %d, want 1", parsed.OptionOccurrences["owner"])
+	}
+	if _, ok := parsed.Options["owner"]; ok {
+		t.Fatalf("Options[owner] = %q, want missing", parsed.Options["owner"])
+	}
+}

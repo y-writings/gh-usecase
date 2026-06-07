@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 
+	"github.com/y-writings/gh-usecase/internal/codeqldefaultsetup"
 	"github.com/y-writings/gh-usecase/internal/githubapi"
 	"github.com/y-writings/gh-usecase/internal/prcount"
 	"github.com/y-writings/gh-usecase/internal/prdetail"
@@ -16,12 +18,17 @@ import (
 )
 
 type graphQLClientFactory func() (githubapi.GraphQLClient, error)
+type restClientFactory func() (githubapi.RESTClient, error)
 
 func Run(argv []string, stdout io.Writer, stderr io.Writer) int {
-	return runWithClientFactory(argv, stdout, stderr, githubapi.NewDefaultGraphQLClient)
+	return runWithClientFactories(argv, stdout, stderr, githubapi.NewDefaultGraphQLClient, githubapi.NewDefaultRESTClient)
 }
 
 func runWithClientFactory(argv []string, stdout io.Writer, stderr io.Writer, newClient graphQLClientFactory) int {
+	return runWithClientFactories(argv, stdout, stderr, newClient, githubapi.NewDefaultRESTClient)
+}
+
+func runWithClientFactories(argv []string, stdout io.Writer, stderr io.Writer, newGraphQLClient graphQLClientFactory, newRESTClient restClientFactory) int {
 	parsed := ParseArgs(argv)
 
 	if len(argv) == 0 || argv[0] == "--help" || argv[0] == "-h" {
@@ -42,11 +49,13 @@ func runWithClientFactory(argv []string, stdout io.Writer, stderr io.Writer, new
 
 	switch command {
 	case "pr-count":
-		return runPrCount(parsed, stdout, stderr, newClient)
+		return runPrCount(parsed, stdout, stderr, newGraphQLClient)
 	case "pr-list":
-		return runPrList(parsed, stdout, stderr, newClient)
+		return runPrList(parsed, stdout, stderr, newGraphQLClient)
 	case "pr-detail":
-		return runPrDetail(parsed, stdout, stderr, newClient)
+		return runPrDetail(parsed, stdout, stderr, newGraphQLClient)
+	case "codeql-default-setup":
+		return runCodeQLDefaultSetup(parsed, stdout, stderr, newRESTClient)
 	default:
 		fmt.Fprintf(stderr, "command '%s' is not implemented yet\n", command)
 		return 1
@@ -195,6 +204,71 @@ func runPrDetail(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClien
 	return 0
 }
 
+func runCodeQLDefaultSetup(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient restClientFactory) int {
+	if parsed.Help {
+		fmt.Fprintln(stdout, CodeQLDefaultSetupUsage)
+		return 0
+	}
+
+	if err := rejectUnsupportedOptions(parsed, []string{"owner", "repo", "languages"}); err != nil {
+		printCommandError(stderr, CodeQLDefaultSetupUsage, err)
+		return 1
+	}
+	if parsed.OptionOccurrences["languages"] > 1 {
+		printCommandError(stderr, CodeQLDefaultSetupUsage, validation.New("languages may be specified only once"))
+		return 1
+	}
+
+	input := codeqldefaultsetup.Input{
+		Owner:     parsed.Options["owner"],
+		Repo:      parsed.Options["repo"],
+		Languages: parsed.Options["languages"],
+	}
+	if _, err := codeqldefaultsetup.Validate(input); err != nil {
+		printCommandError(stderr, CodeQLDefaultSetupUsage, err)
+		return 1
+	}
+
+	client, err := newClient()
+	if err != nil {
+		printExecutionError(stderr, err)
+		return 1
+	}
+
+	output, err := codeqldefaultsetup.Execute(context.Background(), client, input)
+	if err != nil {
+		printCommandError(stderr, CodeQLDefaultSetupUsage, err)
+		return 1
+	}
+
+	encoded, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
+}
+
+func rejectUnsupportedOptions(parsed ParsedArgs, allowed []string) error {
+	allowedOptions := make(map[string]struct{}, len(allowed))
+	for _, option := range allowed {
+		allowedOptions[option] = struct{}{}
+	}
+
+	unknown := make([]string, 0)
+	for option := range parsed.OptionOccurrences {
+		if _, ok := allowedOptions[option]; !ok {
+			unknown = append(unknown, option)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	return validation.New("unknown option --" + unknown[0])
+}
+
 func printCommandError(stderr io.Writer, usage string, err error) {
 	var validationError validation.Error
 	if errors.As(err, &validationError) {
@@ -211,7 +285,7 @@ func printExecutionError(stderr io.Writer, err error) {
 
 func isKnownCommand(command string) bool {
 	switch command {
-	case "pr-count", "pr-list", "pr-detail":
+	case "pr-count", "pr-list", "pr-detail", "codeql-default-setup":
 		return true
 	default:
 		return false
