@@ -158,11 +158,7 @@ func configMatches(current CurrentConfig, desired DesiredConfig) bool {
 }
 
 func runnerTypeMatches(current *string, desired string) bool {
-	// GitHub may omit runner_type in GET responses; omission means unknown, not drift.
-	if current == nil {
-		return true
-	}
-	return *current == desired
+	return current != nil && *current == desired
 }
 
 func normalizeLanguageSlice(languages []string) []string {
