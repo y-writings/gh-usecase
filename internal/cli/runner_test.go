@@ -308,6 +308,7 @@ func TestRunPrintsCommandUsageForHelpWithoutCreatingGitHubClient(t *testing.T) {
 		{command: "pr-list", usage: "Usage: gh-usecase pr-list"},
 		{command: "pr-detail", usage: "Usage: gh-usecase pr-detail"},
 		{command: "codeql-default-setup", usage: "Usage: gh-usecase codeql-default-setup"},
+		{command: "pull-request-creation-policy", usage: "Usage: gh-usecase pull-request-creation-policy"},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
 			var stdout bytes.Buffer
@@ -494,5 +495,267 @@ func TestRunPrintsPrDetailUsageWhenHelpFollowsCommand(t *testing.T) {
 	}
 	if stderr.String() != "" {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+type restCall struct {
+	Method string
+	Path   string
+	Body   string
+}
+
+type pullRequestCreationPolicyRESTClient struct {
+	current string
+	calls   []restCall
+}
+
+func (c *pullRequestCreationPolicyRESTClient) DoWithContext(ctx context.Context, method string, path string, body io.Reader, response interface{}) error {
+	var bodyText string
+	if body != nil {
+		bodyBytes, err := io.ReadAll(body)
+		if err != nil {
+			return err
+		}
+		bodyText = string(bodyBytes)
+	}
+	c.calls = append(c.calls, restCall{Method: method, Path: path, Body: bodyText})
+
+	switch method {
+	case http.MethodGet:
+		payload := map[string]string{"pull_request_creation_policy": c.current}
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(encoded, response)
+	case http.MethodPatch:
+		payload := map[string]string{"pull_request_creation_policy": "collaborators_only"}
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(encoded, response)
+	default:
+		return errors.New("unexpected REST method")
+	}
+}
+
+func TestRunPrintsPullRequestCreationPolicyUsageWhenHelpFollowsCommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"pull-request-creation-policy", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "Usage: gh-usecase pull-request-creation-policy") {
+		t.Fatalf("stdout = %q, want pull request creation policy usage", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "all|collaborators_only") {
+		t.Fatalf("stdout = %q, want policy enum", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRootUsageListsPullRequestCreationPolicy(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run(nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "pull-request-creation-policy") {
+		t.Fatalf("stdout = %q, want root usage to list pull-request-creation-policy", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRejectsPullRequestCreationPolicyUnknownOptionBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo", "--policy", "all", "--name", "repo"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage: gh-usecase pull-request-creation-policy") {
+		t.Fatalf("stderr = %q, want command usage", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown option --name") {
+		t.Fatalf("stderr = %q, want unknown option", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunRejectsPullRequestCreationPolicyRepeatedOptionsBeforeCallingClient(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{name: "owner", argv: []string{"pull-request-creation-policy", "--owner", "octo", "--owner", "other", "--repo", "repo", "--policy", "all"}, want: "owner may be specified only once"},
+		{name: "repo", argv: []string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo", "--repo", "other", "--policy", "all"}, want: "repo may be specified only once"},
+		{name: "policy", argv: []string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo", "--policy", "all", "--policy", "collaborators_only"}, want: "policy may be specified only once"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+			code := runWithClientFactories(
+				tc.argv,
+				&stdout,
+				&stderr,
+				func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+				func() (githubapi.RESTClient, error) { return restClient, nil },
+			)
+
+			if code == 0 {
+				t.Fatal("Run exit code = 0, want non-zero")
+			}
+			if !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tc.want)
+			}
+			if restClient.called {
+				t.Fatal("REST client was called for invalid input")
+			}
+		})
+	}
+}
+
+func TestRunRejectsPullRequestCreationPolicyMissingRequiredOptionsBeforeCallingClient(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{name: "owner", argv: []string{"pull-request-creation-policy", "--repo", "repo", "--policy", "all"}, want: "owner is required"},
+		{name: "repo", argv: []string{"pull-request-creation-policy", "--owner", "octo", "--policy", "all"}, want: "repo is required"},
+		{name: "policy", argv: []string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo"}, want: "policy is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+			code := runWithClientFactories(
+				tc.argv,
+				&stdout,
+				&stderr,
+				func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+				func() (githubapi.RESTClient, error) { return restClient, nil },
+			)
+
+			if code == 0 {
+				t.Fatal("Run exit code = 0, want non-zero")
+			}
+			if !strings.Contains(stderr.String(), "Usage: gh-usecase pull-request-creation-policy") {
+				t.Fatalf("stderr = %q, want command usage", stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tc.want)
+			}
+			if restClient.called {
+				t.Fatal("REST client was called for invalid input")
+			}
+		})
+	}
+}
+
+func TestRunRejectsPullRequestCreationPolicyRepoFullNameBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"pull-request-creation-policy", "--owner", "octo", "--repo", "octo/repo", "--policy", "all"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if !strings.Contains(stderr.String(), "repo must not contain /") {
+		t.Fatalf("stderr = %q, want repo slash error", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunRejectsPullRequestCreationPolicyInvalidPolicyBeforeCallingClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &errorRESTClient{err: errors.New("REST client must not be called")}
+
+	code := runWithClientFactories(
+		[]string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo", "--policy", "COLLABORATORS_ONLY"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code == 0 {
+		t.Fatal("Run exit code = 0, want non-zero")
+	}
+	if !strings.Contains(stderr.String(), "policy must be all or collaborators_only") {
+		t.Fatalf("stderr = %q, want policy enum error", stderr.String())
+	}
+	if restClient.called {
+		t.Fatal("REST client was called for invalid input")
+	}
+}
+
+func TestRunPullRequestCreationPolicyPrintsJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	restClient := &pullRequestCreationPolicyRESTClient{current: "all"}
+
+	code := runWithClientFactories(
+		[]string{"pull-request-creation-policy", "--owner", "octo", "--repo", "repo", "--policy", "collaborators_only"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) { return nil, errors.New("GraphQL client must not be created") },
+		func() (githubapi.RESTClient, error) { return restClient, nil },
+	)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0; stderr = %q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if len(restClient.calls) != 2 {
+		t.Fatalf("REST calls = %d, want 2", len(restClient.calls))
+	}
+	if !strings.Contains(stdout.String(), "\"changed\": true") {
+		t.Fatalf("stdout = %q, want changed true JSON", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "\"pull_request_creation_policy\": \"collaborators_only\"") {
+		t.Fatalf("stdout = %q, want desired policy", stdout.String())
 	}
 }
