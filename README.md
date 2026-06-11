@@ -32,6 +32,7 @@ Commands:
 - `pr-list` - fetch pull request list
 - `pr-detail` - fetch pull request detail for analysis
 - `codeql-default-setup` - configure CodeQL default setup for a repository
+- `pull-request-creation-policy` - configure who can create pull requests for a repository
 
 Examples:
 
@@ -40,6 +41,7 @@ Examples:
 ./gh-usecase pr-list --owner y-writings --name gh-usecase --state OPEN --first 10
 ./gh-usecase pr-detail --owner y-writings --name gh-usecase --number 1
 ./gh-usecase codeql-default-setup --owner y-writings --repo gh-usecase --languages go
+./gh-usecase pull-request-creation-policy --owner y-writings --repo gh-usecase --policy collaborators_only
 ```
 
 ## License

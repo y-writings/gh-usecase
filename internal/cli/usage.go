@@ -3,10 +3,11 @@ package cli
 const RootUsage = `Usage: gh-usecase <command> [options]
 
 Commands:
-  pr-count              Fetch pull request total count
-  pr-list               Fetch pull request list
-  pr-detail             Fetch pull request detail for analysis
-  codeql-default-setup  Configure CodeQL default setup for a repository`
+  pr-count                      Fetch pull request total count
+  pr-list                       Fetch pull request list
+  pr-detail                     Fetch pull request detail for analysis
+  codeql-default-setup          Configure CodeQL default setup for a repository
+  pull-request-creation-policy  Configure who can create pull requests for a repository`
 
 const PrCountUsage = `Usage: gh-usecase pr-count --owner <owner> --name <name> [--state OPEN|CLOSED|MERGED]
 
@@ -25,3 +26,9 @@ const CodeQLDefaultSetupUsage = `Usage: gh-usecase codeql-default-setup --owner 
 Configure CodeQL default setup with runner_type=standard, query_suite=default, and threat_model=remote.
 
 Languages must be a comma-separated list containing only: actions, c-cpp, csharp, go, java-kotlin, javascript-typescript, python, ruby, swift.`
+
+const PullRequestCreationPolicyUsage = `Usage: gh-usecase pull-request-creation-policy --owner <owner> --repo <repo> --policy <all|collaborators_only>
+
+Configure who can create pull requests for a repository.
+
+Policy must be one of: all, collaborators_only.`

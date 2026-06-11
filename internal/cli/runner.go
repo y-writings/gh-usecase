@@ -14,6 +14,7 @@ import (
 	"github.com/y-writings/gh-usecase/internal/prcount"
 	"github.com/y-writings/gh-usecase/internal/prdetail"
 	"github.com/y-writings/gh-usecase/internal/prlist"
+	"github.com/y-writings/gh-usecase/internal/pullrequestcreationpolicy"
 	"github.com/y-writings/gh-usecase/internal/validation"
 )
 
@@ -56,6 +57,8 @@ func runWithClientFactories(argv []string, stdout io.Writer, stderr io.Writer, n
 		return runPrDetail(parsed, stdout, stderr, newGraphQLClient)
 	case "codeql-default-setup":
 		return runCodeQLDefaultSetup(parsed, stdout, stderr, newRESTClient)
+	case "pull-request-creation-policy":
+		return runPullRequestCreationPolicy(parsed, stdout, stderr, newRESTClient)
 	default:
 		fmt.Fprintf(stderr, "command '%s' is not implemented yet\n", command)
 		return 1
@@ -250,6 +253,54 @@ func runCodeQLDefaultSetup(parsed ParsedArgs, stdout io.Writer, stderr io.Writer
 	return 0
 }
 
+func runPullRequestCreationPolicy(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient restClientFactory) int {
+	if parsed.Help {
+		fmt.Fprintln(stdout, PullRequestCreationPolicyUsage)
+		return 0
+	}
+
+	if err := rejectUnsupportedOptions(parsed, []string{"owner", "repo", "policy"}); err != nil {
+		printCommandError(stderr, PullRequestCreationPolicyUsage, err)
+		return 1
+	}
+	for _, option := range []string{"owner", "repo", "policy"} {
+		if parsed.OptionOccurrences[option] > 1 {
+			printCommandError(stderr, PullRequestCreationPolicyUsage, validation.New(option+" may be specified only once"))
+			return 1
+		}
+	}
+
+	input := pullrequestcreationpolicy.Input{
+		Owner:  parsed.Options["owner"],
+		Repo:   parsed.Options["repo"],
+		Policy: parsed.Options["policy"],
+	}
+	if _, err := pullrequestcreationpolicy.Validate(input); err != nil {
+		printCommandError(stderr, PullRequestCreationPolicyUsage, err)
+		return 1
+	}
+
+	client, err := newClient()
+	if err != nil {
+		printExecutionError(stderr, err)
+		return 1
+	}
+
+	output, err := pullrequestcreationpolicy.Execute(context.Background(), client, input)
+	if err != nil {
+		printCommandError(stderr, PullRequestCreationPolicyUsage, err)
+		return 1
+	}
+
+	encoded, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
+}
+
 func rejectUnsupportedOptions(parsed ParsedArgs, allowed []string) error {
 	allowedOptions := make(map[string]struct{}, len(allowed))
 	for _, option := range allowed {
@@ -285,7 +336,7 @@ func printExecutionError(stderr io.Writer, err error) {
 
 func isKnownCommand(command string) bool {
 	switch command {
-	case "pr-count", "pr-list", "pr-detail", "codeql-default-setup":
+	case "pr-count", "pr-list", "pr-detail", "codeql-default-setup", "pull-request-creation-policy":
 		return true
 	default:
 		return false
