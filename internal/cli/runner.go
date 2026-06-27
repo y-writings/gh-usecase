@@ -8,8 +8,9 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"strings"
 
-	"github.com/y-writings/gh-usecase/internal/codeqldefaultsetup"
+	"github.com/y-writings/gh-usecase/codeqldefaultsetup"
 	"github.com/y-writings/gh-usecase/internal/githubapi"
 	"github.com/y-writings/gh-usecase/internal/prcount"
 	"github.com/y-writings/gh-usecase/internal/prdetail"
@@ -225,7 +226,7 @@ func runCodeQLDefaultSetup(parsed ParsedArgs, stdout io.Writer, stderr io.Writer
 	input := codeqldefaultsetup.Input{
 		Owner:     parsed.Options["owner"],
 		Repo:      parsed.Options["repo"],
-		Languages: parsed.Options["languages"],
+		Languages: splitCodeQLDefaultSetupLanguages(parsed.Options["languages"]),
 	}
 	if _, err := codeqldefaultsetup.Validate(input); err != nil {
 		printCommandError(stderr, CodeQLDefaultSetupUsage, err)
@@ -238,7 +239,7 @@ func runCodeQLDefaultSetup(parsed ParsedArgs, stdout io.Writer, stderr io.Writer
 		return 1
 	}
 
-	output, err := codeqldefaultsetup.Execute(context.Background(), client, input)
+	output, err := codeqldefaultsetup.Reconcile(context.Background(), client, input)
 	if err != nil {
 		printCommandError(stderr, CodeQLDefaultSetupUsage, err)
 		return 1
@@ -251,6 +252,13 @@ func runCodeQLDefaultSetup(parsed ParsedArgs, stdout io.Writer, stderr io.Writer
 	}
 	fmt.Fprintln(stdout, string(encoded))
 	return 0
+}
+
+func splitCodeQLDefaultSetupLanguages(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, ",")
 }
 
 func runPullRequestCreationPolicy(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient restClientFactory) int {

@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/y-writings/gh-usecase/internal/githubapi"
 	"github.com/y-writings/gh-usecase/internal/validation"
 )
 
@@ -38,7 +37,7 @@ var allowedLanguageList = []string{
 	"swift",
 }
 
-func Execute(ctx context.Context, client githubapi.RESTClient, input Input) (Output, error) {
+func Reconcile(ctx context.Context, client Client, input Input) (Output, error) {
 	languages, err := Validate(input)
 	if err != nil {
 		return Output{}, err
@@ -106,7 +105,7 @@ func Validate(input Input) ([]string, error) {
 	if strings.Contains(input.Repo, "/") {
 		return nil, validation.New("repo must not contain /")
 	}
-	if input.Languages == "" {
+	if len(input.Languages) == 0 {
 		return nil, validation.New("languages is required")
 	}
 
@@ -117,11 +116,10 @@ func Validate(input Input) ([]string, error) {
 	return languages, nil
 }
 
-func NormalizeLanguages(raw string) ([]string, error) {
-	parts := strings.Split(raw, ",")
+func NormalizeLanguages(raw []string) ([]string, error) {
 	languages := make(map[string]struct{})
 
-	for _, part := range parts {
+	for _, part := range raw {
 		language := strings.TrimSpace(part)
 		if language == "" {
 			return nil, validation.New("languages must not contain empty values")

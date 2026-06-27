@@ -18,8 +18,8 @@ func TestValidateRejectsMissingRequiredFields(t *testing.T) {
 		input Input
 		want  string
 	}{
-		{name: "owner", input: Input{Repo: "repo", Languages: "go"}, want: "owner is required"},
-		{name: "repo", input: Input{Owner: "owner", Languages: "go"}, want: "repo is required"},
+		{name: "owner", input: Input{Repo: "repo", Languages: []string{"go"}}, want: "owner is required"},
+		{name: "repo", input: Input{Owner: "owner", Languages: []string{"go"}}, want: "repo is required"},
 		{name: "languages", input: Input{Owner: "owner", Repo: "repo"}, want: "languages is required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestValidateRejectsMissingRequiredFields(t *testing.T) {
 }
 
 func TestValidateRejectsRepoFullName(t *testing.T) {
-	_, err := Validate(Input{Owner: "owner", Repo: "owner/repo", Languages: "go"})
+	_, err := Validate(Input{Owner: "owner", Repo: "owner/repo", Languages: []string{"go"}})
 
 	if err == nil || err.Error() != "repo must not contain /" {
 		t.Fatalf("Validate error = %v, want repo slash validation", err)
@@ -40,7 +40,7 @@ func TestValidateRejectsRepoFullName(t *testing.T) {
 }
 
 func TestNormalizeLanguagesTrimsDeduplicatesAndSorts(t *testing.T) {
-	got, err := NormalizeLanguages("go, javascript-typescript,go,python")
+	got, err := NormalizeLanguages([]string{"go", " javascript-typescript", "go", "python"})
 	if err != nil {
 		t.Fatalf("NormalizeLanguages returned error: %v", err)
 	}
@@ -52,9 +52,9 @@ func TestNormalizeLanguagesTrimsDeduplicatesAndSorts(t *testing.T) {
 }
 
 func TestNormalizeLanguagesRejectsUnknownAndIncorrectCase(t *testing.T) {
-	for _, raw := range []string{"Go", "typescript", "go,"} {
-		t.Run(raw, func(t *testing.T) {
-			_, err := NormalizeLanguages(raw)
+	for _, languages := range [][]string{{"Go"}, {"typescript"}, {"go", ""}} {
+		t.Run(strings.Join(languages, ","), func(t *testing.T) {
+			_, err := NormalizeLanguages(languages)
 			if err == nil {
 				t.Fatal("NormalizeLanguages returned nil error")
 			}
@@ -118,7 +118,7 @@ func assignJSON(target interface{}, value interface{}) error {
 	return json.Unmarshal(encoded, target)
 }
 
-func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
+func TestReconcileDoesNotPatchWhenConfigurationMatches(t *testing.T) {
 	runnerType := "standard"
 	client := &fakeRESTClient{
 		current: CurrentConfig{
@@ -130,9 +130,9 @@ func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
 		},
 	}
 
-	output, err := Execute(context.Background(), client, Input{Owner: "y-writings", Repo: "repo", Languages: "go,javascript-typescript"})
+	output, err := Reconcile(context.Background(), client, Input{Owner: "y-writings", Repo: "repo", Languages: []string{"go", "javascript-typescript"}})
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	if output.Changed {
@@ -152,7 +152,7 @@ func TestExecuteDoesNotPatchWhenConfigurationMatches(t *testing.T) {
 	}
 }
 
-func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
+func TestReconcileDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) {
 	client := &fakeRESTClient{
 		current: CurrentConfig{
 			State:       "configured",
@@ -162,9 +162,9 @@ func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) 
 		},
 	}
 
-	output, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	output, err := Reconcile(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: []string{"go"}})
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	if output.Changed {
@@ -175,14 +175,14 @@ func TestExecuteDoesNotPatchWhenConfiguredResponseOmitsRunnerType(t *testing.T) 
 	}
 }
 
-func TestExecutePatchesWhenRunnerTypeIsLabeled(t *testing.T) {
+func TestReconcilePatchesWhenRunnerTypeIsLabeled(t *testing.T) {
 	client := &fakeRESTClient{
 		currentJSON: `{"state":"configured","languages":["go"],"query_suite":"default","threat_model":"remote","runner_type":"labeled","runner_label":"codeql-large"}`,
 	}
 
-	output, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	output, err := Reconcile(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: []string{"go"}})
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	if !output.Changed {
@@ -193,7 +193,7 @@ func TestExecutePatchesWhenRunnerTypeIsLabeled(t *testing.T) {
 	}
 }
 
-func TestExecutePatchesWhenConfigurationDiffers(t *testing.T) {
+func TestReconcilePatchesWhenConfigurationDiffers(t *testing.T) {
 	runID := int64(123456)
 	runURL := "https://github.com/y-writings/repo/actions/runs/123456"
 	client := &fakeRESTClient{
@@ -206,9 +206,9 @@ func TestExecutePatchesWhenConfigurationDiffers(t *testing.T) {
 		patchResponse: patchResponse{RunID: &runID, RunURL: &runURL},
 	}
 
-	output, err := Execute(context.Background(), client, Input{Owner: "y-writings", Repo: "repo", Languages: "go"})
+	output, err := Reconcile(context.Background(), client, Input{Owner: "y-writings", Repo: "repo", Languages: []string{"go"}})
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	if !output.Changed {
@@ -230,7 +230,7 @@ func TestExecutePatchesWhenConfigurationDiffers(t *testing.T) {
 	}
 }
 
-func TestExecutePatchesWhenCurrentLanguagesAreSuperset(t *testing.T) {
+func TestReconcilePatchesWhenCurrentLanguagesAreSuperset(t *testing.T) {
 	client := &fakeRESTClient{
 		current: CurrentConfig{
 			State:       "configured",
@@ -240,9 +240,9 @@ func TestExecutePatchesWhenCurrentLanguagesAreSuperset(t *testing.T) {
 		},
 	}
 
-	output, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	output, err := Reconcile(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: []string{"go"}})
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	if !output.Changed {
@@ -253,11 +253,11 @@ func TestExecutePatchesWhenCurrentLanguagesAreSuperset(t *testing.T) {
 	}
 }
 
-func TestExecutePropagatesAPIErrors(t *testing.T) {
+func TestReconcilePropagatesAPIErrors(t *testing.T) {
 	client := &fakeRESTClient{errOnGet: errors.New("github failed")}
 
-	_, err := Execute(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: "go"})
+	_, err := Reconcile(context.Background(), client, Input{Owner: "owner", Repo: "repo", Languages: []string{"go"}})
 	if err == nil || err.Error() != "github failed" {
-		t.Fatalf("Execute error = %v, want github failed", err)
+		t.Fatalf("Reconcile error = %v, want github failed", err)
 	}
 }
