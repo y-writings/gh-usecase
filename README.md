@@ -44,6 +44,47 @@ Examples:
 ./gh-usecase pull-request-creation-policy --owner y-writings --repo gh-usecase --policy collaborators_only
 ```
 
+## Go Package Usage
+
+The CodeQL default setup reconciler is also available as an importable Go package:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/y-writings/gh-usecase/codeqldefaultsetup"
+)
+
+func main() {
+	client, err := api.NewRESTClient(api.ClientOptions{
+		Headers: map[string]string{
+			"Accept":               "application/vnd.github+json",
+			"X-GitHub-Api-Version": "2022-11-28",
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	result, err := codeqldefaultsetup.Reconcile(context.Background(), client, codeqldefaultsetup.Input{
+		Owner:     "y-writings",
+		Repo:      "gh-usecase",
+		Languages: []string{"go"},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(result.Changed)
+}
+```
+
+The Go API accepts typed language input as `[]string`; CSV parsing is only part of the CLI adapter.
+
 ## License
 
 MIT

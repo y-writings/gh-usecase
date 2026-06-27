@@ -1,9 +1,18 @@
 package codeqldefaultsetup
 
+import (
+	"context"
+	"io"
+)
+
+type Client interface {
+	DoWithContext(ctx context.Context, method string, path string, body io.Reader, response interface{}) error
+}
+
 type Input struct {
 	Owner     string
 	Repo      string
-	Languages string
+	Languages []string
 }
 
 type CurrentConfig struct {
