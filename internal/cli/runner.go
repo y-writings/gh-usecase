@@ -16,6 +16,7 @@ import (
 	"github.com/y-writings/gh-usecase/internal/prdetail"
 	"github.com/y-writings/gh-usecase/internal/prlist"
 	"github.com/y-writings/gh-usecase/internal/pullrequestcreationpolicy"
+	"github.com/y-writings/gh-usecase/internal/repolist"
 	"github.com/y-writings/gh-usecase/internal/validation"
 )
 
@@ -54,6 +55,8 @@ func runWithClientFactories(argv []string, stdout io.Writer, stderr io.Writer, n
 		return runPrCount(parsed, stdout, stderr, newGraphQLClient)
 	case "pr-list":
 		return runPrList(parsed, stdout, stderr, newGraphQLClient)
+	case "repo-list":
+		return runRepoList(parsed, stdout, stderr, newGraphQLClient)
 	case "pr-detail":
 		return runPrDetail(parsed, stdout, stderr, newGraphQLClient)
 	case "codeql-default-setup":
@@ -144,6 +147,62 @@ func runPrList(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient 
 	output, err := prlist.Execute(context.Background(), client, input)
 	if err != nil {
 		printCommandError(stderr, PrListUsage, err)
+		return 1
+	}
+
+	encoded, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
+}
+
+func runRepoList(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient graphQLClientFactory) int {
+	if parsed.Help {
+		fmt.Fprintln(stdout, RepoListUsage)
+		return 0
+	}
+
+	if err := rejectUnsupportedOptions(parsed, []string{"owner", "first", "after"}); err != nil {
+		printCommandError(stderr, RepoListUsage, err)
+		return 1
+	}
+	for _, option := range []string{"owner", "first", "after"} {
+		if parsed.OptionOccurrences[option] > 1 {
+			printCommandError(stderr, RepoListUsage, validation.New(option+" may be specified only once"))
+			return 1
+		}
+	}
+
+	input := repolist.Input{Owner: parsed.Options["owner"]}
+	if parsed.OptionOccurrences["first"] > 0 {
+		first, err := strconv.Atoi(parsed.Options["first"])
+		if err != nil {
+			printCommandError(stderr, RepoListUsage, validation.New("first must be an integer"))
+			return 1
+		}
+		input.First = &first
+	}
+	if parsed.OptionOccurrences["after"] > 0 {
+		after := parsed.Options["after"]
+		input.After = &after
+	}
+	if err := repolist.Validate(input); err != nil {
+		printCommandError(stderr, RepoListUsage, err)
+		return 1
+	}
+
+	client, err := newClient()
+	if err != nil {
+		printExecutionError(stderr, err)
+		return 1
+	}
+
+	output, err := repolist.Execute(context.Background(), client, input)
+	if err != nil {
+		printCommandError(stderr, RepoListUsage, err)
 		return 1
 	}
 
@@ -344,7 +403,7 @@ func printExecutionError(stderr io.Writer, err error) {
 
 func isKnownCommand(command string) bool {
 	switch command {
-	case "pr-count", "pr-list", "pr-detail", "codeql-default-setup", "pull-request-creation-policy":
+	case "pr-count", "pr-list", "repo-list", "pr-detail", "codeql-default-setup", "pull-request-creation-policy":
 		return true
 	default:
 		return false

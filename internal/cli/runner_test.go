@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -22,6 +23,26 @@ func (c *errorGraphQLClient) DoWithContext(ctx context.Context, query string, va
 	c.called = true
 	return c.err
 }
+
+type repoListGraphQLClient struct {
+	fixture   []byte
+	err       error
+	variables map[string]interface{}
+	calls     int
+}
+
+func (c *repoListGraphQLClient) DoWithContext(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+	c.calls++
+	c.variables = variables
+	if c.err != nil {
+		return c.err
+	}
+	return json.Unmarshal(c.fixture, response)
+}
+
+const wantRepoListUsage = `Usage: gh-usecase repo-list --owner <account> [--first <1-100>] [--after <cursor>]
+
+Fetch one name-ordered page of repositories owned by a user or organization and visible to the authenticated user.`
 
 type errorRESTClient struct {
 	called bool
@@ -96,6 +117,277 @@ func TestRunPrintsRootUsageForHelp(t *testing.T) {
 			}
 			if stderr.String() != "" {
 				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunRootUsageListsRepoList(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run(nil, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "repo-list                     Fetch repositories owned by an account") {
+		t.Fatalf("stdout = %q, want repo-list command", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunPrintsRepoListHelpWithoutCreatingGraphQLClient(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	clientCreations := 0
+
+	code := runWithClientFactory([]string{"repo-list", "--help"}, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+		clientCreations++
+		return nil, errors.New("GraphQL client must not be created for help")
+	})
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0", code)
+	}
+	if stdout.String() != wantRepoListUsage+"\n" {
+		t.Fatalf("stdout = %q, want repo-list usage", stdout.String())
+	}
+	for _, option := range []string{"--owner <account>", "--first <1-100>", "--after <cursor>"} {
+		if !strings.Contains(stdout.String(), option) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), option)
+		}
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	if clientCreations != 0 {
+		t.Fatalf("GraphQL client creations = %d, want 0", clientCreations)
+	}
+}
+
+func TestRunRejectsRepoListUnsupportedAndRepeatedOptionsBeforeCreatingClient(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{name: "unknown", argv: []string{"repo-list", "--owner", "octo", "--state", "OPEN"}, want: "unknown option --state"},
+		{name: "repeated owner", argv: []string{"repo-list", "--owner", "octo", "--owner", "other"}, want: "owner may be specified only once"},
+		{name: "repeated first", argv: []string{"repo-list", "--owner", "octo", "--first", "10", "--first", "20"}, want: "first may be specified only once"},
+		{name: "repeated after", argv: []string{"repo-list", "--owner", "octo", "--after", "one", "--after", "two"}, want: "after may be specified only once"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			clientCreations := 0
+
+			code := runWithClientFactory(test.argv, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+				clientCreations++
+				return nil, errors.New("GraphQL client must not be created for invalid input")
+			})
+
+			if code != 1 {
+				t.Fatalf("Run exit code = %d, want 1", code)
+			}
+			if stdout.String() != "" {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+			if stderr.String() != wantRepoListUsage+"\n"+test.want+"\n" {
+				t.Fatalf("stderr = %q, want usage and %q", stderr.String(), test.want)
+			}
+			if clientCreations != 0 {
+				t.Fatalf("GraphQL client creations = %d, want 0", clientCreations)
+			}
+		})
+	}
+}
+
+func TestRunRejectsInvalidRepoListInputBeforeCreatingClient(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{name: "missing owner", argv: []string{"repo-list"}, want: "owner is required"},
+		{name: "non-integer first", argv: []string{"repo-list", "--owner", "octo", "--first", "many"}, want: "first must be an integer"},
+		{name: "missing first", argv: []string{"repo-list", "--owner", "octo", "--first"}, want: "first must be an integer"},
+		{name: "first below minimum", argv: []string{"repo-list", "--owner", "octo", "--first", "0"}, want: "first must be between 1 and 100"},
+		{name: "first above maximum", argv: []string{"repo-list", "--owner", "octo", "--first", "101"}, want: "first must be between 1 and 100"},
+		{name: "empty after", argv: []string{"repo-list", "--owner", "octo", "--after="}, want: "after must not be empty"},
+		{name: "missing after", argv: []string{"repo-list", "--owner", "octo", "--after"}, want: "after must not be empty"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			clientCreations := 0
+
+			code := runWithClientFactory(test.argv, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+				clientCreations++
+				return nil, errors.New("GraphQL client must not be created for invalid input")
+			})
+
+			if code != 1 {
+				t.Fatalf("Run exit code = %d, want 1", code)
+			}
+			if stdout.String() != "" {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+			if stderr.String() != wantRepoListUsage+"\n"+test.want+"\n" {
+				t.Fatalf("stderr = %q, want usage and %q", stderr.String(), test.want)
+			}
+			if clientCreations != 0 {
+				t.Fatalf("GraphQL client creations = %d, want 0", clientCreations)
+			}
+		})
+	}
+}
+
+func TestRunRepoListPassesInputAndPrintsPrettyJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	clientCreations := 0
+	client := &repoListGraphQLClient{fixture: []byte(`{
+		"repositoryOwner": {
+			"repositories": {
+				"nodes": [
+					{"name": "alpha", "nameWithOwner": "octo/alpha", "url": "https://github.com/octo/alpha"}
+				],
+				"pageInfo": {"hasNextPage": true, "endCursor": "cursor-2"}
+			}
+		}
+	}`)}
+
+	code := runWithClientFactory(
+		[]string{"repo-list", "--owner", "octo", "--first", "25", "--after", "cursor-1"},
+		&stdout,
+		&stderr,
+		func() (githubapi.GraphQLClient, error) {
+			clientCreations++
+			return client, nil
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("Run exit code = %d, want 0; stderr = %q", code, stderr.String())
+	}
+	if clientCreations != 1 {
+		t.Fatalf("GraphQL client creations = %d, want 1", clientCreations)
+	}
+	if client.calls != 1 {
+		t.Fatalf("GraphQL client calls = %d, want 1", client.calls)
+	}
+	wantVariables := map[string]interface{}{"owner": "octo", "first": 25, "after": "cursor-1"}
+	if !reflect.DeepEqual(client.variables, wantVariables) {
+		t.Fatalf("GraphQL variables = %#v, want %#v", client.variables, wantVariables)
+	}
+	wantOutput := `{
+  "data": {
+    "repositoryOwner": {
+      "repositories": {
+        "nodes": [
+          {
+            "name": "alpha",
+            "nameWithOwner": "octo/alpha",
+            "url": "https://github.com/octo/alpha"
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "cursor-2"
+        }
+      }
+    }
+  }
+}
+`
+	if stdout.String() != wantOutput {
+		t.Fatalf("stdout = %q, want pretty JSON %q", stdout.String(), wantOutput)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRepoListPrintsClientCreationFailureWithoutUsage(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	clientCreations := 0
+
+	code := runWithClientFactory([]string{"repo-list", "--owner", "octo"}, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+		clientCreations++
+		return nil, errors.New("client creation failed")
+	})
+
+	if code != 1 {
+		t.Fatalf("Run exit code = %d, want 1", code)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if stderr.String() != "Failed to execute command: client creation failed\n" {
+		t.Fatalf("stderr = %q, want client creation failure without usage", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "Usage: gh-usecase repo-list") {
+		t.Fatalf("stderr = %q, must not contain repo-list usage", stderr.String())
+	}
+	if clientCreations != 1 {
+		t.Fatalf("GraphQL client creations = %d, want 1", clientCreations)
+	}
+}
+
+func TestRunRepoListPrintsExecutionFailuresWithoutUsage(t *testing.T) {
+	tests := []struct {
+		name    string
+		client  *repoListGraphQLClient
+		message string
+	}{
+		{
+			name:    "null owner",
+			client:  &repoListGraphQLClient{fixture: []byte(`{"repositoryOwner":null}`)},
+			message: "repository owner not found",
+		},
+		{
+			name:    "GraphQL error",
+			client:  &repoListGraphQLClient{err: errors.New("graphql failed")},
+			message: "graphql failed",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			clientCreations := 0
+
+			code := runWithClientFactory([]string{"repo-list", "--owner", "octo"}, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+				clientCreations++
+				return test.client, nil
+			})
+
+			if code != 1 {
+				t.Fatalf("Run exit code = %d, want 1", code)
+			}
+			if stdout.String() != "" {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+			if stderr.String() != "Failed to execute command: "+test.message+"\n" {
+				t.Fatalf("stderr = %q, want execution failure without usage", stderr.String())
+			}
+			if strings.Contains(stderr.String(), "Usage:") {
+				t.Fatalf("stderr = %q, must not contain usage", stderr.String())
+			}
+			if clientCreations != 1 {
+				t.Fatalf("GraphQL client creations = %d, want 1", clientCreations)
+			}
+			if test.client.calls != 1 {
+				t.Fatalf("GraphQL client calls = %d, want 1", test.client.calls)
 			}
 		})
 	}
