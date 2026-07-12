@@ -31,6 +31,7 @@ Commands:
 - `pr-count` - fetch pull request total count
 - `pr-list` - fetch pull request list
 - `pr-detail` - fetch pull request detail for analysis
+- `repo-list` - fetch repositories owned by a user or organization
 - `codeql-default-setup` - configure CodeQL default setup for a repository
 - `pull-request-creation-policy` - configure who can create pull requests for a repository
 
@@ -40,6 +41,7 @@ Examples:
 ./gh-usecase pr-count --owner y-writings --name gh-usecase
 ./gh-usecase pr-list --owner y-writings --name gh-usecase --state OPEN --first 10
 ./gh-usecase pr-detail --owner y-writings --name gh-usecase --number 1
+./gh-usecase repo-list --owner y-writings --first 30
 ./gh-usecase codeql-default-setup --owner y-writings --repo gh-usecase --languages go
 ./gh-usecase pull-request-creation-policy --owner y-writings --repo gh-usecase --policy collaborators_only
 ```
