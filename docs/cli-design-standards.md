@@ -14,14 +14,19 @@ Use this as a guardrail for future refactors and new command implementations.
 1. **Single-page response contract for list-style commands**
    - List-style commands should return one page per call.
    - Pagination should be user-driven with `after` + `first`.
+   - This rule does not apply to a dedicated aggregation use case whose public
+     contract explicitly promises a complete result across all pages.
 
 2. **Server-side filtering only**
    - Only filters directly supported by GitHub GraphQL are allowed.
    - Do not add JavaScript-side filtering that changes result semantics.
 
-3. **No hidden aggregation loops**
+3. **No hidden aggregation loops in list APIs**
    - Do not loop through cursors internally to collect multiple pages.
    - If users need more pages, they call again with `endCursor`.
+   - A purpose-built full aggregation API may own its pagination loop when the
+     complete traversal, all-or-error behavior, and result semantics are part of
+     its documented contract. Its CLI must remain a thin adapter to that API.
 
 4. **Schema consistency across flow**
    - The response shape should be consistent from fetch to return.
@@ -83,4 +88,6 @@ When changing any CLI command, verify that:
 
 - User-facing behavior remains explicit and unsurprising.
 - Filtering and pagination behavior are visible in arguments and output.
-- No hidden local filtering or hidden multi-page aggregation is introduced.
+- No hidden local filtering or undeclared multi-page aggregation is introduced.
+- A full aggregation use case documents its traversal, failure, and consistency
+  semantics and never reports a partial page set as a successful total.

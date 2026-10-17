@@ -4,6 +4,7 @@ const RootUsage = `Usage: gh-usecase <command> [options]
 
 Commands:
   pr-count                      Fetch pull request total count
+  owner-pr-count                Aggregate open pull requests for an account
   pr-list                       Fetch pull request list
   repo-list                     Fetch repositories owned by an account
   pr-detail                     Fetch pull request detail for analysis
@@ -13,6 +14,10 @@ Commands:
 const PrCountUsage = `Usage: gh-usecase pr-count --owner <owner> --name <name> [--state OPEN|CLOSED|MERGED]
 
 Fetch pull request total count.`
+
+const OwnerPrCountUsage = `Usage: gh-usecase owner-pr-count --owner <account>
+
+Aggregate open pull request counts across all repositories owned by a user or organization and visible to the authenticated user.`
 
 const PrListUsage = `Usage: gh-usecase pr-list --owner <owner> --name <name> [--state OPEN|CLOSED|MERGED] [--first <1-100>] [--after <cursor>]
 
