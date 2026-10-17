@@ -139,6 +139,68 @@ func TestRunRootUsageListsRepoList(t *testing.T) {
 	}
 }
 
+func TestRunOwnerPrCountPrintsCompleteJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	client := &repoListGraphQLClient{fixture: []byte(`{
+		"repositoryOwner": {"repositories": {
+			"nodes": [
+				{"nameWithOwner":"octo/alpha","pullRequests":{"totalCount":0}},
+				{"nameWithOwner":"octo/beta","pullRequests":{"totalCount":3}}
+			],
+			"pageInfo":{"hasNextPage":false,"endCursor":null}
+		}}
+	}`)}
+
+	code := runWithClientFactory([]string{"owner-pr-count", "--owner", "octo"}, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+		return client, nil
+	})
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	var output struct {
+		Owner        string `json:"owner"`
+		State        string `json:"state"`
+		Repositories []struct {
+			NameWithOwner    string `json:"nameWithOwner"`
+			PullRequestCount int    `json:"pullRequestCount"`
+		} `json:"repositories"`
+		TotalCount int `json:"totalCount"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("stdout is not JSON: %v", err)
+	}
+	if output.Owner != "octo" || output.State != "OPEN" || len(output.Repositories) != 2 || output.TotalCount != 3 {
+		t.Fatalf("output = %#v", output)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunOwnerPrCountRejectsInvalidOptionsBeforeClientCreation(t *testing.T) {
+	for _, test := range []struct {
+		argv []string
+		want string
+	}{
+		{argv: []string{"owner-pr-count"}, want: "owner is required"},
+		{argv: []string{"owner-pr-count", "--owner", "octo", "--first", "10"}, want: "unknown option --first"},
+		{argv: []string{"owner-pr-count", "--owner", "octo", "--owner", "hubot"}, want: "owner may be specified only once"},
+	} {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		creations := 0
+		code := runWithClientFactory(test.argv, &stdout, &stderr, func() (githubapi.GraphQLClient, error) {
+			creations++
+			return nil, errors.New("must not create client")
+		})
+		if code != 1 || !strings.Contains(stderr.String(), test.want) || creations != 0 {
+			t.Fatalf("argv=%v: code=%d stderr=%q creations=%d", test.argv, code, stderr.String(), creations)
+		}
+	}
+}
+
 func TestRunPrintsRepoListHelpWithoutCreatingGraphQLClient(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

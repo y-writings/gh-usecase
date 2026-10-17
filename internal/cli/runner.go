@@ -18,6 +18,7 @@ import (
 	"github.com/y-writings/gh-usecase/internal/pullrequestcreationpolicy"
 	"github.com/y-writings/gh-usecase/internal/repolist"
 	"github.com/y-writings/gh-usecase/internal/validation"
+	"github.com/y-writings/gh-usecase/ownerprcount"
 )
 
 type graphQLClientFactory func() (githubapi.GraphQLClient, error)
@@ -53,6 +54,8 @@ func runWithClientFactories(argv []string, stdout io.Writer, stderr io.Writer, n
 	switch command {
 	case "pr-count":
 		return runPrCount(parsed, stdout, stderr, newGraphQLClient)
+	case "owner-pr-count":
+		return runOwnerPrCount(parsed, stdout, stderr, newGraphQLClient)
 	case "pr-list":
 		return runPrList(parsed, stdout, stderr, newGraphQLClient)
 	case "repo-list":
@@ -67,6 +70,44 @@ func runWithClientFactories(argv []string, stdout io.Writer, stderr io.Writer, n
 		fmt.Fprintf(stderr, "command '%s' is not implemented yet\n", command)
 		return 1
 	}
+}
+
+func runOwnerPrCount(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient graphQLClientFactory) int {
+	if parsed.Help {
+		fmt.Fprintln(stdout, OwnerPrCountUsage)
+		return 0
+	}
+	if err := rejectUnsupportedOptions(parsed, []string{"owner"}); err != nil {
+		printCommandError(stderr, OwnerPrCountUsage, err)
+		return 1
+	}
+	if parsed.OptionOccurrences["owner"] > 1 {
+		printCommandError(stderr, OwnerPrCountUsage, validation.New("owner may be specified only once"))
+		return 1
+	}
+
+	input := ownerprcount.Input{Owner: parsed.Options["owner"]}
+	if err := ownerprcount.Validate(input); err != nil {
+		printCommandError(stderr, OwnerPrCountUsage, err)
+		return 1
+	}
+	client, err := newClient()
+	if err != nil {
+		printExecutionError(stderr, err)
+		return 1
+	}
+	output, err := ownerprcount.Execute(context.Background(), client, input)
+	if err != nil {
+		printCommandError(stderr, OwnerPrCountUsage, err)
+		return 1
+	}
+	encoded, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
 }
 
 func runPrCount(parsed ParsedArgs, stdout io.Writer, stderr io.Writer, newClient graphQLClientFactory) int {
@@ -403,7 +444,7 @@ func printExecutionError(stderr io.Writer, err error) {
 
 func isKnownCommand(command string) bool {
 	switch command {
-	case "pr-count", "pr-list", "repo-list", "pr-detail", "codeql-default-setup", "pull-request-creation-policy":
+	case "pr-count", "owner-pr-count", "pr-list", "repo-list", "pr-detail", "codeql-default-setup", "pull-request-creation-policy":
 		return true
 	default:
 		return false
