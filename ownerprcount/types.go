@@ -14,8 +14,10 @@ type Input struct {
 }
 
 // RepositoryCount is the open pull request count for one repository.
+// URL is the HTTP URL returned by GitHub's GraphQL Repository.url field.
 type RepositoryCount struct {
 	NameWithOwner    string `json:"nameWithOwner"`
+	URL              string `json:"url"`
 	PullRequestCount int    `json:"pullRequestCount"`
 }
 
@@ -42,6 +44,7 @@ type repositories struct {
 
 type repositoryNode struct {
 	NameWithOwner *string      `json:"nameWithOwner"`
+	URL           *string      `json:"url"`
 	PullRequests  pullRequests `json:"pullRequests"`
 }
 

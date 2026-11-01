@@ -89,13 +89,19 @@ pages internally and uses GitHub's per-repository `totalCount`. The result's
 `repositories` field is always an array (including `[]` when none are visible),
 and `totalCount` is the sum of its entries.
 
+`owner-pr-count` prints that result as indented JSON. Each repository object
+includes `nameWithOwner`, `pullRequestCount`, and `url`. `url` is the HTTP URL
+from GitHub's GraphQL `Repository.url` field, copied as returned. On github.com
+that is `https://github.com/owner/repo`. On GitHub Enterprise Server it is the
+URL on that host.
+
 ```json
 {
   "owner": "example-org",
   "state": "OPEN",
   "repositories": [
-    {"nameWithOwner": "example-org/repo-a", "pullRequestCount": 0},
-    {"nameWithOwner": "example-org/repo-b", "pullRequestCount": 3}
+    {"nameWithOwner": "example-org/repo-a", "url": "https://github.com/example-org/repo-a", "pullRequestCount": 0},
+    {"nameWithOwner": "example-org/repo-b", "url": "https://github.com/example-org/repo-b", "pullRequestCount": 3}
   ],
   "totalCount": 3
 }
