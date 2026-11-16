@@ -145,8 +145,8 @@ func TestRunOwnerPrCountPrintsCompleteJSON(t *testing.T) {
 	client := &repoListGraphQLClient{fixture: []byte(`{
 		"repositoryOwner": {"repositories": {
 			"nodes": [
-				{"nameWithOwner":"octo/alpha","pullRequests":{"totalCount":0}},
-				{"nameWithOwner":"octo/beta","pullRequests":{"totalCount":3}}
+				{"nameWithOwner":"octo/alpha","url":"https://ghe.example/octo/alpha","pullRequests":{"totalCount":0}},
+				{"nameWithOwner":"octo/beta","url":"https://ghe.example/octo/beta","pullRequests":{"totalCount":3}}
 			],
 			"pageInfo":{"hasNextPage":false,"endCursor":null}
 		}}
@@ -159,20 +159,26 @@ func TestRunOwnerPrCountPrintsCompleteJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
 	}
-	var output struct {
-		Owner        string `json:"owner"`
-		State        string `json:"state"`
-		Repositories []struct {
-			NameWithOwner    string `json:"nameWithOwner"`
-			PullRequestCount int    `json:"pullRequestCount"`
-		} `json:"repositories"`
-		TotalCount int `json:"totalCount"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
-		t.Fatalf("stdout is not JSON: %v", err)
-	}
-	if output.Owner != "octo" || output.State != "OPEN" || len(output.Repositories) != 2 || output.TotalCount != 3 {
-		t.Fatalf("output = %#v", output)
+	wantOutput := `{
+  "owner": "octo",
+  "state": "OPEN",
+  "repositories": [
+    {
+      "nameWithOwner": "octo/alpha",
+      "url": "https://ghe.example/octo/alpha",
+      "pullRequestCount": 0
+    },
+    {
+      "nameWithOwner": "octo/beta",
+      "url": "https://ghe.example/octo/beta",
+      "pullRequestCount": 3
+    }
+  ],
+  "totalCount": 3
+}
+`
+	if stdout.String() != wantOutput {
+		t.Fatalf("stdout = %q, want pretty JSON %q", stdout.String(), wantOutput)
 	}
 	if stderr.String() != "" {
 		t.Fatalf("stderr = %q, want empty", stderr.String())

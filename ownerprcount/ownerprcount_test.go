@@ -32,8 +32,8 @@ func (f *fakeClient) DoWithContext(_ context.Context, query string, variables ma
 
 func TestExecuteAggregatesEveryRepositoryPage(t *testing.T) {
 	client := &fakeClient{responses: []response{
-		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/alpha","pullRequests":{"totalCount":0}},{"nameWithOwner":"octo/beta","pullRequests":{"totalCount":3}}],"pageInfo":{"hasNextPage":true,"endCursor":"next"}}}}`},
-		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/gamma","pullRequests":{"totalCount":2}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}`},
+		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/alpha","url":"https://ghe.example/octo/alpha","pullRequests":{"totalCount":0}},{"nameWithOwner":"octo/beta","url":"https://ghe.example/octo/beta","pullRequests":{"totalCount":3}}],"pageInfo":{"hasNextPage":true,"endCursor":"next"}}}}`},
+		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/gamma","url":"https://ghe.example/octo/gamma","pullRequests":{"totalCount":2}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}`},
 	}}
 
 	got, err := Execute(context.Background(), client, Input{Owner: "octo"})
@@ -41,9 +41,9 @@ func TestExecuteAggregatesEveryRepositoryPage(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 	want := Output{Owner: "octo", State: "OPEN", Repositories: []RepositoryCount{
-		{NameWithOwner: "octo/alpha", PullRequestCount: 0},
-		{NameWithOwner: "octo/beta", PullRequestCount: 3},
-		{NameWithOwner: "octo/gamma", PullRequestCount: 2},
+		{NameWithOwner: "octo/alpha", URL: "https://ghe.example/octo/alpha", PullRequestCount: 0},
+		{NameWithOwner: "octo/beta", URL: "https://ghe.example/octo/beta", PullRequestCount: 3},
+		{NameWithOwner: "octo/gamma", URL: "https://ghe.example/octo/gamma", PullRequestCount: 2},
 	}, TotalCount: 5}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Execute output = %#v, want %#v", got, want)
@@ -82,7 +82,7 @@ func TestExecuteReturnsNonNilEmptyRepositories(t *testing.T) {
 func TestExecuteFailsWithoutReturningPartialAggregation(t *testing.T) {
 	wantErr := errors.New("second page failed")
 	client := &fakeClient{responses: []response{
-		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/alpha","pullRequests":{"totalCount":4}}],"pageInfo":{"hasNextPage":true,"endCursor":"next"}}}}`},
+		{payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/alpha","url":"https://github.com/octo/alpha","pullRequests":{"totalCount":4}}],"pageInfo":{"hasNextPage":true,"endCursor":"next"}}}}`},
 		{err: wantErr},
 	}}
 
@@ -102,8 +102,10 @@ func TestExecuteRejectsMissingOwnerAndData(t *testing.T) {
 		want    string
 	}{
 		{name: "unknown owner", payload: `{"repositoryOwner":null}`, want: "repository owner not found"},
-		{name: "missing name", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"pullRequests":{"totalCount":1}}],"pageInfo":{}}}}`, want: "repository nameWithOwner is missing"},
-		{name: "missing count", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/repo","pullRequests":{}}],"pageInfo":{}}}}`, want: "totalCount is missing"},
+		{name: "missing name", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"url":"https://github.com/octo/repo","pullRequests":{"totalCount":1}}],"pageInfo":{}}}}`, want: "repository nameWithOwner is missing"},
+		{name: "missing url", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/repo","pullRequests":{"totalCount":1}}],"pageInfo":{}}}}`, want: "repository url is missing"},
+		{name: "empty url", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/repo","url":"","pullRequests":{"totalCount":1}}],"pageInfo":{}}}}`, want: "repository url is missing"},
+		{name: "missing count", payload: `{"repositoryOwner":{"repositories":{"nodes":[{"nameWithOwner":"octo/repo","url":"https://github.com/octo/repo","pullRequests":{}}],"pageInfo":{}}}}`, want: "totalCount is missing"},
 		{name: "missing cursor", payload: `{"repositoryOwner":{"repositories":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":null}}}}`, want: "endCursor is missing"},
 	}
 	for _, test := range tests {
@@ -133,7 +135,7 @@ func TestExecuteValidatesAndHonorsCanceledContext(t *testing.T) {
 }
 
 func TestQueryRequestsOwnedRepositoriesAndOpenTotalCount(t *testing.T) {
-	for _, fragment := range []string{"repositoryOwner(login: $owner)", "ownerAffiliations: OWNER", "pullRequests(states: [OPEN])", "totalCount", "hasNextPage", "endCursor"} {
+	for _, fragment := range []string{"repositoryOwner(login: $owner)", "ownerAffiliations: OWNER", "nameWithOwner", "url", "pullRequests(states: [OPEN])", "totalCount", "hasNextPage", "endCursor"} {
 		if !strings.Contains(graphQLQuery, fragment) {
 			t.Fatalf("query missing %q", fragment)
 		}

@@ -47,6 +47,9 @@ func Execute(ctx context.Context, client Client, input Input) (Output, error) {
 			if node.NameWithOwner == nil || *node.NameWithOwner == "" {
 				return Output{}, errors.New("repository nameWithOwner is missing")
 			}
+			if node.URL == nil || *node.URL == "" {
+				return Output{}, fmt.Errorf("repository url is missing for %s", *node.NameWithOwner)
+			}
 			if node.PullRequests.TotalCount == nil {
 				return Output{}, fmt.Errorf("open pull request totalCount is missing for %s", *node.NameWithOwner)
 			}
@@ -55,6 +58,7 @@ func Execute(ctx context.Context, client Client, input Input) (Output, error) {
 			}
 			output.Repositories = append(output.Repositories, RepositoryCount{
 				NameWithOwner:    *node.NameWithOwner,
+				URL:              *node.URL,
 				PullRequestCount: *node.PullRequests.TotalCount,
 			})
 			output.TotalCount += *node.PullRequests.TotalCount
